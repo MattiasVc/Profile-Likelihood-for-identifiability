@@ -6,11 +6,9 @@ Data based identifiability analysis applied to ODE models, using the profile lik
 
 | File | Description |
 |------|-------------|
-| `Parameter_Estimation_lotka_volterra.py` | Parameter estimation for the Lotka-Volterra predator-prey model
-| 
-| `run_identifiability.ipynb` | Notebook that computes the profile likelihood and extracts the likelihood-based confidence intervals
-| `ABC_reaction.ipynb` | ABC-based inference for the reaction model |
-| `FiguresProfileLikelihood_*/` | Saved profile-likelihood data (`.txt`) and figures (`.png`) |
+| `Parameter_Estimation_lotka_volterra.py` | Parameter estimation for the Lotka-Volterra predator-prey model |
+| `run_identifiability.ipynb` | Notebook that computes the profile likelihood and extracts the likelihood-based confidence intervals |
+| `FiguresProfileLikelihood_*/` | Saved profile-likelihood data (`.txt`) and figures (`.png`), including those shown under Results |
 
 ## Installation
 
@@ -29,12 +27,6 @@ Requires Python 3.9+.
 
    ```bash
    pip install numpy scipy matplotlib pathos jupyter ipykernel
-   ```
-
-   Or, once a `requirements.txt` is added:
-
-   ```bash
-   pip install -r requirements.txt
    ```
 
 | Package | Used for |
@@ -60,14 +52,21 @@ ID_LV.extract_confidence_intervals()
 ## Method (summary)
 
 - Parameters are estimated in log10 space by least squares (multi-start trust-region optimisation).
-- For each parameter, it is fixed on a grid, the others are re-optimised, and the resulting cost forms the profile.
-- The confidence interval is the set of values where the profile stays below `cost_opt + threshold` (threshold = 3.87).
-- A parameter is **practically unidentifiable** if its profile does not cross the threshold on one or both sides within the bounds (e.g. `beta` and `predator_0` in the Lotka-Volterra example with unknown initial conditions).
+- For each parameter, the others are re-optimised and the resulting costs forms the profile.
+- The confidence interval is the set of values where the profile stays below the confidence threshold `cost_opt + threshold` (95 confidence threshold = 3.87 by default).
 
 ## Results
 
-_To be added: key profile figures and a table of confidence intervals._
+Example profile likelihood for `alpha` (known initial conditions, sigma = 0.01). The red curve is the profile, the dashed black line is the threshold `cost_opt + 3.87`, the green line the optimum and the blue line the true value. The confidence interval is where the curve lies below the threshold.
+
+![Profile likelihood of alpha](FiguresProfileLikelihood_lotka_volterra_0/_n_points_15_fidx_0_sigma_0.01_Threshold_3.87.png)
+
+All profiles in one figure:
+
+![All profiles](FiguresProfileLikelihood_lotka_volterra_0/All_Profiles.png)
+
 
 ## License
 
+_To be added._
 _To be added._
