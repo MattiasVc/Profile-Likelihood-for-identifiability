@@ -57,20 +57,13 @@ ID_LV.extract_confidence_intervals()
 
 ## Results
 
-<<<<<<< HEAD
 Example profile likelihood for `alpha` (known initial conditions, sigma = 0.01). The red curve is the profile likelihood, the dashed black line is the 95 percent confidence threshold. the green line is the maximum likelihood estimate of `alpha` and the blue line the true value. The confidence interval corresponds to the values of `alpha` for which the profile likelihood stays below the confidence threshold.
-
-![Profile likelihood of alpha](FiguresProfileLikelihood_lotka_volterra_0/_n_points_15_fidx_0_sigma_0.01_Threshold_3.87.png)
-
-=======
-Example profile likelihood for `alpha` (known initial conditions, sigma = 0.01). The red curve is the profile, the dashed black line is the threshold `cost_opt + 3.87`, the green line the optimum and the blue line the true value. The confidence interval is where the curve lies below the threshold.
 
 ![Profile likelihood of alpha](FiguresProfileLikelihood_lotka_volterra_0/_n_points_15_fidx_0_sigma_0.01_Threshold_3.87.png)
 
 All profiles in one figure:
 
 ![All profiles](FiguresProfileLikelihood_lotka_volterra_0/All_Profiles.png)
->>>>>>> 6d8b39b (Improve documentation and update identifiability code)
 
 
 ## License
