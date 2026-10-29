@@ -7,10 +7,9 @@ from numpy import random as rdm
 from pathlib import Path
 from pathos.multiprocessing import ProcessingPool as Pool 
 from os import cpu_count
-
 class Identifiability_Analysis_lotka_volterra:
-    # Parameters (log10 scale): alpha, beta, delta, gamma
-    # States: y = [prey, predator]; initial populations are known.
+    # Model parameters are represented on the log10 scale.
+    # State order: [prey, predator]; initial populations may be estimated.
 
     PARAM_NAMES = ["alpha", "beta", "delta", "gamma"]
 
@@ -24,8 +23,21 @@ class Identifiability_Analysis_lotka_volterra:
         true_params = (0.52, 0.026, 0.026, 0.84),
         t_end = 20,
         bool_unknown_y0 = False,
-        confidence_treshold = 3.87 # 95 percent confidence intervals
-    ):
+        confidence_treshold = 3.87 # 95 percent confidence interval
+                    ):
+        """
+        Args:
+            n_data_points: Number of synthetic observations per observed state, evenly spaced over [0, t_end].
+            opt_pm: Optional initial optimal parameter vector, in log10 scale.
+            sigma: Relative standard deviation of the synthetic observation noise.
+            n_pm_search_lattice_points: Number of Latin hypercube initial guesses for optimization.
+            observed: State indices to observe: 0 for prey and 1 for predator.
+            true_params: True model parameter values used to generate synthetic data.
+            t_end: End time of the simulated time series.
+            bool_unknown_y0: Whether to estimate the initial populations as parameters.
+            confidence_treshold: Likelihood-based confidence threshold.
+
+        """
         if (
             not isinstance(n_data_points, (int, np.integer))
             or isinstance(n_data_points, bool)
@@ -63,6 +75,7 @@ class Identifiability_Analysis_lotka_volterra:
         # Per-parameter log10 bounds; initial populations are searched in [1, 100]
         self.phi_lower = np.full(self.n_params, self.PHI_BOUND_LOWER, dtype=float)
         self.phi_upper = np.full(self.n_params, self.PHI_BOUND_UPPER, dtype=float)
+        
         self.phi_lower[4:] = 0.0
         self.phi_upper[4:] = 2.0
         self.threshold_value = confidence_treshold
@@ -135,7 +148,7 @@ class Identifiability_Analysis_lotka_volterra:
         plt.show()
 
     def init_phi(self, n_lattice_points=None):
-        """Initialize log10-parameter guesses for alpha, beta, delta and gamma."""
+        """Generate Latin hypercube initial guesses within the log10 parameter bounds."""
         if n_lattice_points is None:
             n_lattice_points = self.n_pm_search_lattice_points
         sampler = qmc.LatinHypercube(d=self.n_params)
@@ -165,7 +178,7 @@ class Identifiability_Analysis_lotka_volterra:
         return float(minus_2_ll) if np.isfinite(minus_2_ll) else 1e12
 
     def calibrate_trust_region(self):
-        """Multi-start trust-region calibration for all four model parameters."""
+        """Calibrate the model parameters with multi-start trust-region optimization."""
         phi_bounds = Bounds(self.phi_lower, self.phi_upper)
         results = []
         print("iteration:")
@@ -211,6 +224,7 @@ class Identifiability_Analysis_lotka_volterra:
             phi_opt = self.phi_opt = np.loadtxt(self.get_output_dir() / "phi_opt.txt")
             self.cost_opt = float(np.loadtxt(self.get_output_dir() / "cost_opt.txt"))
         _, states_fit = self.solve_single(phi_opt)
+        print("phi_opt: ", phi_opt)
         fig, ax = plt.subplots()
         for state_index in range(2):
             ax.plot(
@@ -239,11 +253,13 @@ class Identifiability_Analysis_lotka_volterra:
         ax.set_xlabel("Time")
         ax.set_ylabel("Population")
         ax.legend()
-        plt.savefig("trajectory_fit")
+        output_dir = self.get_output_dir()
+        plt.savefig(output_dir/ "trajectory_fit")
         plt.show()
 
     def recalibrate_model_simple(self, fixed_val, fixed_index, phi_opt):
-        """Re-optimize all other parameters with one parameter fixed."""
+        """Re-optimize all other parameters with one parameter fixed.
+        """
         if not 0 <= fixed_index < self.n_params:
             raise ValueError(f"fixed_index must be between 0 and {self.n_params - 1}")
         if fixed_val <= 0:
@@ -277,7 +293,17 @@ class Identifiability_Analysis_lotka_volterra:
         bool_all_range=False,
         show_plot=False,
     ):
-        """Profile one parameter at logarithmically spaced values."""
+        """Profile one parameter at logarithmically spaced values.
+            arguments:
+
+            fixed_index: index, connected to the parameter of interest
+            n_points: Number of profile likelihood points that are computed over a uniform interval.
+            lower_range, upper_range: range in positive and negative direction from the MLE to compute profile likelihood points
+            bool_all_range: boolean value set to True to compute the profile likleihood over the entire parameter boundary range
+            show_plot: show the profile likelihood as a graph
+
+            returns: 2d array of profile likelihood values
+        """
         if self.phi_opt is None:
             raise ValueError(
                 "The parameters have to be estimated first (calibrate_trust_region)"
@@ -384,6 +410,20 @@ class Identifiability_Analysis_lotka_volterra:
     
     def extract_confidence_intervals( self, arr_fixed_indices=None, arr_n_points=None ):
         
+        """Plot profile likelihoods and estimate confidence intervals.
+
+        Profile data are loaded from the configuration's output folder. Interval
+        bounds are linearly interpolated in log10(parameter) where the profile
+        crosses the likelihood threshold.
+
+        Args:
+            arr_fixed_indices: Parameter indices whose confidence intervals to extract.
+            arr_n_points: Number of profile points used for each parameter's data file.
+
+        Returns:
+            A dictionary mapping parameter names to (lower, upper) interval bounds.
+        """
+
         if self.cost_opt is None:
             raise ValueError("Calibrate the model before extracting confidence intervals")
         if arr_fixed_indices is None:
@@ -417,7 +457,9 @@ class Identifiability_Analysis_lotka_volterra:
                 continue
 
             profile = np.loadtxt(path, ndmin=2)
-            values = profile[profile[:, 1] <= critical_value, 0]
+            profile = profile[np.argsort(profile[:, 0])]
+            inside = profile[:, 1] <= critical_value
+            values = profile[inside, 0]
 
             self.plot_ppl_data(profile, fixed_index, n_points, ax=ax)
 
@@ -425,7 +467,21 @@ class Identifiability_Analysis_lotka_volterra:
                 print(f"{name:>6}: no profile points within the confidence threshold")
                 continue
 
-            low, high = float(values.min()), float(values.max())
+            # Refine each bound by interpolating (in log10 of the parameter) between
+            # the last point inside and the first point outside the threshold.
+            def crossing(p_in, c_in, p_out, c_out):
+                frac = (critical_value - c_in) / (c_out - c_in)
+                if p_in > 0 and p_out > 0:
+                    return 10 ** (np.log10(p_in) + frac * (np.log10(p_out) - np.log10(p_in)))
+                return p_in + frac * (p_out - p_in)
+
+            idx = np.flatnonzero(inside)
+            i_lo, i_hi = idx[0], idx[-1]
+            low, high = float(profile[i_lo, 0]), float(profile[i_hi, 0])
+            if i_lo > 0:
+                low = float(crossing(*profile[i_lo, :2], *profile[i_lo - 1, :2]))
+            if i_hi < len(profile) - 1:
+                high = float(crossing(*profile[i_hi, :2], *profile[i_hi + 1, :2]))
             confidence_intervals[name] = (low, high)
             print(
                 f"{name:>6}: [{low:.3e}, {high:.3e}]  "
@@ -439,7 +495,52 @@ class Identifiability_Analysis_lotka_volterra:
         plt.savefig(output_dir / f"All_Profiles")
         plt.show()
         return confidence_intervals
+    
+    def plot_all_profiles_one_figure( self, arr_fixed_indices=None, arr_n_points=None ):
+        colors = ["red", "black", "green", "orange", "purple", "blue"]
+        if self.cost_opt is None:
+            raise ValueError("Calibrate the model before extracting confidence intervals")
+        if arr_fixed_indices is None:
+            arr_fixed_indices = range(self.n_params)
+        if arr_n_points is None:
+            arr_n_points = [15] * len(arr_fixed_indices)
+        if len(arr_fixed_indices) != len(arr_n_points):
+            raise ValueError("arr_fixed_indices and arr_n_points must have the same length")
 
+        output_dir = self.get_output_dir()
+
+        critical_value = self.cost_opt + self.threshold_value
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.axhline(critical_value, color="black", ls="--", lw=1.5,
+                   label=f"cost_opt + {self.threshold_value}")
+
+        for k, (fixed_index, n_points) in enumerate(zip(arr_fixed_indices, arr_n_points)):
+            name = self.PARAM_NAMES[fixed_index]
+            path = output_dir / f"ppl_data_{name}_N_{n_points}_points.txt"
+            if not path.exists():
+                print(f"{name:>6}: file not found ({path.name})")
+                continue
+
+            profile = np.loadtxt(path, ndmin=2)
+            profile = profile[np.argsort(profile[:, 0])]
+            log_values = np.log10(profile[:, 0])
+            in_bounds = (log_values >= self.phi_lower[fixed_index]) & (
+                log_values <= self.phi_upper[fixed_index]
+            )
+            ax.plot(log_values[in_bounds], profile[in_bounds, 1],
+                    color=colors[k % len(colors)], lw=1.5, label=name)
+
+        ax.set_xlim(self.phi_lower.min(), self.phi_upper.max())
+        ax.set_ylim(self.cost_opt - 3, critical_value + 10)
+        ax.set_xlabel("log10(parameter)", fontsize=14)
+        ax.set_ylabel("Profile likelihood value")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(output_dir / "All_Profiles_One_Figure.png")
+        plt.show()
+        
 if __name__ == "__main__":
 
     # Parameter estimation:
