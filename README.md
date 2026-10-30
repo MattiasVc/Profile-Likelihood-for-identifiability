@@ -61,10 +61,6 @@ Example profile likelihood for `alpha` (known initial conditions, sigma = 0.01).
 
 ![Profile likelihood of alpha](FiguresProfileLikelihood_lotka_volterra_0/_n_points_15_fidx_0_sigma_0.01_Threshold_3.87.png)
 
-All profiles in one figure:
-
-![All profiles](FiguresProfileLikelihood_lotka_volterra_0/All_Profiles.png)
-
 
 ## License
 
